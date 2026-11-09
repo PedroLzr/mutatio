@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#131719" />
+    <meta
+      name="description"
+      content="Herramientas locales de sonido, vídeo e imagen."
+    />
+    <title>Mutatio · Taller multimedia</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="estilos.css" />
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <header class="cabecera">
+      <a class="marca" href="./" aria-label="Mutatio, inicio"
+        ><span aria-hidden="true">◈</span> Mutatio</a
+      >
+      <p>
+        Procesamiento 100% local en tu navegador. Tus archivos nunca se suben a
+        ningún servidor.
+      </p>
+    </header>
+    <main>
+      <nav class="herramientas" aria-label="Herramientas multimedia">
+        <button
+          type="button"
+          class="tarjeta activa"
+          data-panel="sonido"
+          aria-controls="sonido"
+          aria-expanded="true"
+        >
+          <span class="simbolo" aria-hidden="true">≋</span
+          ><strong>Sonido</strong><span>Cortar y convertir</span>
+        </button>
+        <button
+          type="button"
+          class="tarjeta"
+          data-panel="video"
+          aria-controls="video"
+          aria-expanded="false"
+        >
+          <span class="simbolo" aria-hidden="true">▷</span><strong>Vídeo</strong
+          ><span>Editar imagen y sonido</span>
+        </button>
+        <button
+          type="button"
+          class="tarjeta"
+          data-panel="imagen"
+          aria-controls="imagen"
+          aria-expanded="false"
+        >
+          <span class="simbolo" aria-hidden="true">▧</span
+          ><strong>Imágenes</strong><span>Recortar, pixelar y comprimir</span>
+        </button>
+        <button
+          type="button"
+          class="tarjeta"
+          data-panel="creador"
+          aria-controls="creador"
+          aria-expanded="false"
+        >
+          <span class="simbolo" aria-hidden="true">⊞</span
+          ><strong>Crear vídeo</strong><span>Dar movimiento a tus fotos</span>
+        </button>
+      </nav>
+      <section id="sonido" class="panel" aria-labelledby="titulo-sonido">
+        <form id="formulario-sonido">
+          <fieldset>
+            <div class="titulo-panel">
+              <h2 id="titulo-sonido">Gestión de sonido</h2>
+            </div>
+            <label class="archivo"
+              >Archivo de sonido<input
+                id="archivo-sonido"
+                type="file"
+                accept="audio/*"
+                required
+              /><span class="elegir-archivo">Seleccionar archivos</span
+              ><span class="nombre-archivo"
+                >Ningún archivo seleccionado</span
+              ></label
+            >
+            <audio id="vista-sonido" preload="metadata" hidden></audio>
+            <div class="campos">
+              <label
+                >Operación<select id="operacion-sonido">
+                  <option value="cortar">Cortar fragmento</option>
+                  <option value="convertir">Convertir formato</option>
+                </select></label
+              ><label
+                >Formato de salida<select id="formato-sonido">
+                  <option value="mp3">MP3</option>
+                  <option value="wav">WAV</option>
+                </select></label
+              >
+            </div>
+            <div class="campos" id="tiempos-sonido">
+              <label
+                >Inicio (segundos)<input
+                  id="inicio-sonido"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value="0"
+                  required /></label
+              ><label
+                >Fin (segundos)<input
+                  id="fin-sonido"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value="10"
+                  required
+              /></label>
+            </div>
+            <button class="principal" type="submit">
+              Procesar y descargar <span aria-hidden="true">↓</span>
+            </button>
+          </fieldset>
+        </form>
+        <section
+          id="estado-sonido"
+          class="estado"
+          aria-label="Estado de sonido"
+          hidden
+        >
+          <div class="linea-estado">
+            <p id="mensaje-sonido" role="status" aria-live="polite"></p>
+            <button id="cancelar-sonido" data-cancelar type="button" hidden>
+              Cancelar
+            </button>
+          </div>
+          <progress
+            id="progreso-sonido"
+            max="100"
+            aria-label="Progreso de sonido"
+            hidden
+          ></progress>
+          <div id="resultado-sonido" class="resultado" hidden>
+            <p id="detalle-sonido" role="status"></p>
+            <a id="descarga-sonido">Descargar resultado</a>
+          </div>
+        </section>
+      </section>
+      <section id="video" class="panel" aria-labelledby="titulo-video" hidden>
+        <form id="formulario-video">
+          <fieldset>
+            <div class="titulo-panel">
+              <h2 id="titulo-video">Gestión de vídeo</h2>
+            </div>
+            <label class="archivo"
+              >Archivo de vídeo<input
+                id="archivo-video"
+                type="file"
+                accept="video/*"
+                required
+              /><span class="elegir-archivo">Seleccionar archivos</span
+              ><span class="nombre-archivo"
+                >Ningún archivo seleccionado</span
+              ></label
+            ><video
+              id="vista-video"
+              preload="metadata"
+              playsinline
+              hidden
+            ></video>
+            <label
+              >Operación<select id="operacion-video">
+                <option value="cortar">Cortar fragmento</option>
+                <option value="silenciar">Silenciar vídeo</option>
+                <option value="sustituir">Cambiar banda sonora</option>
+              </select></label
+            >
+            <div id="tiempos-video">
+              <div class="campos">
+                <label
+                  >Inicio (segundos)<input
+                    id="inicio-video"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value="0"
+                    required /></label
+                ><label
+                  >Fin (segundos)<input
+                    id="fin-video"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value="10"
+                    required
+                /></label>
+              </div>
+              <p class="nota">
+                El corte sin recodificar se ajusta a los fotogramas clave. El
+                inicio puede variar ligeramente.
+              </p>
+            </div>
+            <label id="banda-sonora" class="archivo" hidden
+              >Nueva pista de sonido<input
+                id="archivo-banda"
+                type="file"
+                accept="audio/*"
+              /><span class="elegir-archivo">Seleccionar archivos</span
+              ><span class="nombre-archivo"
+                >Ningún archivo seleccionado</span
+              ></label
+            >
+            <button class="principal" type="submit">
+              Procesar y descargar <span aria-hidden="true">↓</span>
+            </button>
+          </fieldset>
+        </form>
+        <section
+          id="estado-video"
+          class="estado"
+          aria-label="Estado de vídeo"
+          hidden
+        >
+          <div class="linea-estado">
+            <p id="mensaje-video" role="status" aria-live="polite"></p>
+            <button id="cancelar-video" data-cancelar type="button" hidden>
+              Cancelar
+            </button>
+          </div>
+          <progress
+            id="progreso-video"
+            max="100"
+            aria-label="Progreso de vídeo"
+            hidden
+          ></progress>
+          <div id="resultado-video" class="resultado" hidden>
+            <p id="detalle-video" role="status"></p>
+            <a id="descarga-video">Descargar resultado</a>
+          </div>
+        </section>
+      </section>
+      <section id="imagen" class="panel" aria-labelledby="titulo-imagen" hidden>
+        <form id="formulario-imagen">
+          <fieldset>
+            <div class="titulo-panel">
+              <h2 id="titulo-imagen">Procesamiento de imágenes</h2>
+            </div>
+            <label class="archivo"
+              >Archivo de imagen<input
+                id="archivo-imagen"
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/avif,image/bmp"
+                required
+              /><span class="elegir-archivo">Seleccionar archivos</span
+              ><span class="nombre-archivo"
+                >Ningún archivo seleccionado</span
+              ></label
+            >
+            <div class="campos">
+              <label
+                >Herramienta<select id="operacion-imagen">
+                  <option value="recortar">Recortar área</option>
+                  <option value="pixelar">Pixelar zona</option>
+                </select></label
+              ><label
+                >Proporción<select id="proporcion">
+                  <option value="0">Libre</option>
+                  <option value="1">Cuadrada 1:1</option>
+                  <option value="1.7777777778">Panorámica 16:9</option>
+                </select></label
+              >
+            </div>
+            <div id="editor" hidden>
+              <div class="lienzo-contenedor">
+                <canvas
+                  id="lienzo"
+                  aria-label="Imagen editable. Arrastra para seleccionar una zona."
+                ></canvas>
+              </div>
+              <p class="nota">
+                Arrastra sobre la imagen o introduce las coordenadas en píxeles.
+              </p>
+              <div class="campos coordenadas">
+                <label
+                  >Posición X<input
+                    id="zona-x"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value="0" /></label
+                ><label
+                  >Posición Y<input
+                    id="zona-y"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value="0" /></label
+                ><label
+                  >Anchura<input
+                    id="zona-ancho"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value="1" /></label
+                ><label
+                  >Altura<input
+                    id="zona-alto"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value="1"
+                /></label>
+              </div>
+              <div class="acciones">
+                <button id="aplicar-zona" type="button">
+                  Aplicar selección</button
+                ><button id="restaurar-imagen" type="button">
+                  Restaurar original
+                </button>
+              </div>
+            </div>
+            <div class="campos">
+              <label
+                >Formato de salida<select id="formato-imagen">
+                  <option value="webp">WebP</option>
+                  <option value="jpeg">JPEG</option>
+                </select></label
+              ><label
+                >Calidad <output id="valor-calidad" for="calidad">80%</output
+                ><input id="calidad" type="range" min="10" max="100" value="80"
+              /></label>
+            </div>
+            <button class="principal" type="submit">
+              Comprimir y descargar <span aria-hidden="true">↓</span>
+            </button>
+          </fieldset>
+        </form>
+        <section
+          id="estado-imagen"
+          class="estado"
+          aria-label="Estado de imagen"
+          hidden
+        >
+          <div class="linea-estado">
+            <p id="mensaje-imagen" role="status" aria-live="polite"></p>
+            <button id="cancelar-imagen" data-cancelar type="button" hidden>
+              Cancelar
+            </button>
+          </div>
+          <progress
+            id="progreso-imagen"
+            max="100"
+            aria-label="Progreso de imagen"
+            hidden
+          ></progress>
+          <div id="resultado-imagen" class="resultado" hidden>
+            <p id="detalle-imagen" role="status"></p>
+            <a id="descarga-imagen">Descargar resultado</a>
+          </div>
+        </section>
+      </section>
+      <section
+        id="creador"
+        class="panel"
+        aria-labelledby="titulo-creador"
+        hidden
+      >
+        <form id="formulario-creador">
+          <fieldset>
+            <div class="titulo-panel">
+              <h2 id="titulo-creador">Creador de vídeos</h2>
+            </div>
+            <label id="zona-fotos" class="archivo zona-fotos"
+              >Arrastra hasta 150 fotos aquí o selecciónalas<input
+                id="archivos-fotos"
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/avif,image/bmp"
+                multiple
+              /><span class="elegir-archivo">Seleccionar archivos</span
+              ><span class="nombre-archivo"
+                >Ningún archivo seleccionado</span
+              ></label
+            >
+            <p
+              id="resumen-fotos"
+              class="nota"
+              role="status"
+              aria-live="polite"
+            ></p>
+            <div class="acciones">
+              <button id="vaciar-fotos" type="button" hidden>
+                Vaciar selección
+              </button>
+            </div>
+            <ol
+              id="secuencia"
+              class="secuencia"
+              aria-label="Orden de las fotografías"
+            ></ol>
+            <div class="campos">
+              <label
+                >Segundos por foto<input
+                  id="duracion-foto"
+                  type="number"
+                  min="0.1"
+                  max="60"
+                  step="0.1"
+                  value="3"
+                  required /></label
+              ><label
+                >Música de fondo (opcional)<input
+                  id="musica"
+                  type="file"
+                  accept="audio/*"
+                /><span class="elegir-archivo">Seleccionar archivos</span
+                ><span class="nombre-archivo"
+                  >Ningún archivo seleccionado</span
+                ></label
+              >
+            </div>
+            <label
+              >Transición entre imágenes<select id="transicion">
+                <option value="ninguna">Sin transición</option>
+                <option value="fundido">Fundido</option>
+                <option value="negro">Fundido a negro</option>
+                <option value="barrido">Barrido hacia la izquierda</option>
+                <option value="deslizamiento">
+                  Deslizamiento hacia la izquierda
+                </option>
+              </select></label
+            >
+            <p id="nota-transicion" class="nota" hidden>
+              La transición ocupa hasta 0,5 segundos al final de cada foto, sin
+              alargar el vídeo.
+            </p>
+            <div class="acciones">
+              <button id="quitar-musica" type="button" hidden>
+                Quitar música
+              </button>
+            </div>
+            <p class="nota">
+              Salida panorámica de 1280 × 720. La música se desvanece al final.
+            </p>
+            <button class="principal" type="submit">
+              Crear y descargar <span aria-hidden="true">↓</span>
+            </button>
+          </fieldset>
+        </form>
+        <section
+          id="estado-creador"
+          class="estado"
+          aria-label="Estado de creador de vídeos"
+          hidden
+        >
+          <div class="linea-estado">
+            <p id="mensaje-creador" role="status" aria-live="polite"></p>
+            <button id="cancelar-creador" data-cancelar type="button" hidden>
+              Cancelar
+            </button>
+          </div>
+          <progress
+            id="progreso-creador"
+            max="100"
+            aria-label="Progreso de creador de vídeos"
+            hidden
+          ></progress>
+          <div id="resultado-creador" class="resultado" hidden>
+            <p id="detalle-creador" role="status"></p>
+            <a id="descarga-creador">Descargar resultado</a>
+          </div>
+        </section>
+      </section>
+    </main>
+    <noscript>Activa JavaScript para utilizar las herramientas.</noscript>
+  </body>
+</html>

@@ -1,0 +1,31 @@
+# Sustituye el dominio y ajusta la ruta si tu carpeta tiene otro nombre.
+mutatio.tudominio.com {
+	root * /srv/Mutatio
+
+	# Mantiene el orden de compresión, cabeceras y publicación.
+	route {
+		encode zstd gzip
+
+		header {
+			Cross-Origin-Opener-Policy "same-origin"
+			Cross-Origin-Embedder-Policy "require-corp"
+			Cross-Origin-Resource-Policy "same-origin"
+			X-Content-Type-Options "nosniff"
+			Referrer-Policy "no-referrer"
+			Permissions-Policy "camera=(), microphone=(), geolocation=()"
+			Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; connect-src 'self'; img-src 'self' blob:; media-src 'self' blob:; style-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'"
+		}
+
+		# Solo se publican los archivos de la aplicación, no la configuración ni el repositorio.
+		@privado not path / /index.html /estilos.css /app.js /multimedia.js /favicon.svg /dependencias/*
+		respond @privado 404
+
+		# Las versiones fijadas se reutilizan; la aplicación comprueba sus actualizaciones.
+		@versionado path /dependencias/motor-0.12.15/* /dependencias/nucleo-0.12.10/*
+		header @versionado Cache-Control "public, max-age=31536000, immutable"
+		@actualizable not path /dependencias/motor-0.12.15/* /dependencias/nucleo-0.12.10/*
+		header @actualizable Cache-Control "no-cache"
+
+		file_server
+	}
+}
