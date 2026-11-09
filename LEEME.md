@@ -40,10 +40,12 @@ Mutatio/
 
 ## Uso
 
-- **Sonido:** cortar y convertir a MP3 o WAV.
-- **Vídeo:** cortar sin recodificar, silenciar o sustituir la pista de sonido. Salida Matroska (`.mkv`) para conservar los códecs originales. Los cortes dependen de los fotogramas clave y pueden variar ligeramente respecto al intervalo elegido.
+- **Sonido:** escuchar, seleccionar un fragmento con marcadores o tiempos numéricos y exportar a MP3 o WAV. La onda se muestra cuando el navegador puede decodificar el archivo (hasta 32 MB y diez minutos).
+- **Vídeo:** vista previa y selección visual del fragmento. Corte preciso a MP4 (recodifica) o rápido a MKV (conserva los códecs y se ajusta a fotogramas clave). También permite silenciar o sustituir la pista de sonido con salida MKV. La precisión está limitada a los fotogramas del archivo original.
 - **Imágenes:** recortar, pixelar y comprimir a WebP o JPEG. Primero aplica la selección y después descarga. JPEG utiliza fondo blanco para las transparencias.
 - **Crear vídeo:** hasta 200 fotos, orden editable, duración por foto y por transición, cuatro efectos y música opcional. Salida MP4 o MKV a 30 fotogramas por segundo, con tamaños de 720p, 1080p, 2160p o el de la primera foto. Calidad equilibrada, alta o sin pérdidas de codificación. Las transiciones no alargan el vídeo; la música se repite si es necesario y se desvanece al final.
+
+La línea temporal permite arrastrar el inicio, el fin y el punto de reproducción. Los botones permiten marcar los extremos en la posición actual y reproducir únicamente la selección. También se puede usar el teclado: flechas para recorrer la línea, Mayús para avanzar un segundo e Inicio/Fin para ir a los extremos. Si el navegador no puede reproducir el formato, siguen disponibles los campos numéricos.
 
 Cada herramienta conserva su propio resultado hasta reemplazarlo o recargar la página. El enlace permite repetir una descarga si el navegador no la inicia automáticamente.
 

@@ -226,6 +226,34 @@ export async function procesarMultimedia(opciones, notificar) {
             String(datos.duracion),
           );
           nombre = "video-con-banda-sonora.mkv";
+        } else if (cortar && opciones.tipoCorte === "preciso") {
+          salida = "resultado.mp4";
+          tipo = "video/mp4";
+          nombre = "video-recortado-preciso.mp4";
+          argumentos.push(
+            "-map",
+            "0:v:0",
+            "-map",
+            "0:a:0?",
+            "-c:v",
+            "libx264",
+            "-threads",
+            "1",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "18",
+            "-vf",
+            "pad=ceil(iw/2)*2:ceil(ih/2)*2",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            "-movflags",
+            "+faststart",
+          );
         } else {
           argumentos.push("-map", "0:v:0");
           if (cortar) argumentos.push("-map", "0:a?");

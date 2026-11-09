@@ -83,7 +83,66 @@
                 >Ningún archivo seleccionado</span
               ></label
             >
-            <audio id="vista-sonido" preload="metadata" hidden></audio>
+            <div id="reproductor-sonido" class="reproductor" hidden>
+              <audio id="vista-sonido" preload="metadata"></audio>
+              <div class="acciones controles-reproduccion">
+                <button id="reproducir-sonido" type="button">Reproducir</button>
+                <output id="posicion-sonido">0:00.00</output>
+                <label
+                  >Volumen<input
+                    id="volumen-sonido"
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value="1"
+                /></label>
+              </div>
+              <canvas
+                id="linea-sonido"
+                class="linea-temporal"
+                role="slider"
+                tabindex="0"
+                aria-label="Posición de reproducción de sonido"
+                aria-valuemin="0"
+                aria-valuemax="0"
+                aria-valuenow="0"
+              ></canvas>
+              <div id="seleccion-sonido">
+                <div class="campos marcadores">
+                  <label
+                    >Inicio del fragmento<input
+                      id="marcador-inicio-sonido"
+                      type="range"
+                      min="0"
+                      max="0"
+                      step="0.01"
+                      value="0"
+                  /></label>
+                  <label
+                    >Fin del fragmento<input
+                      id="marcador-fin-sonido"
+                      type="range"
+                      min="0"
+                      max="0"
+                      step="0.01"
+                      value="0"
+                  /></label>
+                </div>
+                <div class="acciones">
+                  <button id="marcar-inicio-sonido" type="button">
+                    Marcar inicio aquí
+                  </button>
+                  <button id="marcar-fin-sonido" type="button">
+                    Marcar fin aquí
+                  </button>
+                  <button id="reproducir-seleccion-sonido" type="button">
+                    Reproducir selección
+                  </button>
+                </div>
+                <p id="fragmento-sonido" class="nota"></p>
+              </div>
+            </div>
             <div class="campos">
               <label
                 >Operación<select id="operacion-sonido">
@@ -161,12 +220,67 @@
               ><span class="nombre-archivo"
                 >Ningún archivo seleccionado</span
               ></label
-            ><video
-              id="vista-video"
-              preload="metadata"
-              playsinline
-              hidden
-            ></video>
+            >
+            <div id="reproductor-video" class="reproductor" hidden>
+              <video id="vista-video" preload="metadata" playsinline></video>
+              <div class="acciones controles-reproduccion">
+                <button id="reproducir-video" type="button">Reproducir</button>
+                <output id="posicion-video">0:00.00</output>
+                <label
+                  >Volumen<input
+                    id="volumen-video"
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value="1"
+                /></label>
+              </div>
+              <canvas
+                id="linea-video"
+                class="linea-temporal"
+                role="slider"
+                tabindex="0"
+                aria-label="Posición de reproducción de vídeo"
+                aria-valuemin="0"
+                aria-valuemax="0"
+                aria-valuenow="0"
+              ></canvas>
+              <div id="seleccion-video">
+                <div class="campos marcadores">
+                  <label
+                    >Inicio del fragmento<input
+                      id="marcador-inicio-video"
+                      type="range"
+                      min="0"
+                      max="0"
+                      step="0.01"
+                      value="0"
+                  /></label>
+                  <label
+                    >Fin del fragmento<input
+                      id="marcador-fin-video"
+                      type="range"
+                      min="0"
+                      max="0"
+                      step="0.01"
+                      value="0"
+                  /></label>
+                </div>
+                <div class="acciones">
+                  <button id="marcar-inicio-video" type="button">
+                    Marcar inicio aquí
+                  </button>
+                  <button id="marcar-fin-video" type="button">
+                    Marcar fin aquí
+                  </button>
+                  <button id="reproducir-seleccion-video" type="button">
+                    Reproducir selección
+                  </button>
+                </div>
+                <p id="fragmento-video" class="nota"></p>
+              </div>
+            </div>
             <label
               >Operación<select id="operacion-video">
                 <option value="cortar">Cortar fragmento</option>
@@ -194,9 +308,15 @@
                     required
                 /></label>
               </div>
-              <p class="nota">
-                El corte sin recodificar se ajusta a los fotogramas clave. El
-                inicio puede variar ligeramente.
+              <label
+                >Tipo de corte<select id="tipo-corte-video">
+                  <option value="preciso">Preciso · MP4</option>
+                  <option value="rapido">Rápido · MKV</option>
+                </select></label
+              >
+              <p id="nota-corte-video" class="nota">
+                El corte preciso recodifica el vídeo para respetar la selección.
+                Tarda más y puede modificar ligeramente la calidad.
               </p>
             </div>
             <label id="banda-sonora" class="archivo" hidden
@@ -370,7 +490,7 @@
               <h2 id="titulo-creador">Creador de vídeos</h2>
             </div>
             <label id="zona-fotos" class="archivo zona-fotos"
-              >Arrastra hasta 200 fotos aquí o selecciónalas<input
+              >Arrastra hasta 200 fotos aquí o selecciona tus fotos<input
                 id="archivos-fotos"
                 type="file"
                 accept="image/jpeg,image/png,image/webp,image/avif,image/bmp"

@@ -19,7 +19,7 @@ let panelEnProceso;
 const descargas = new Map();
 const estadoElemento = (nombre, bloque = panelEnProceso || panelActivo) =>
   elemento(`${nombre}-${bloque}`);
-const vistas = new Map();
+const lineasTemporales = new Map();
 const lienzo = elemento("lienzo");
 const contexto = lienzo.getContext("2d");
 const imagenTrabajo = document.createElement("canvas");
@@ -38,7 +38,10 @@ function progreso(valor, texto) {
 }
 function bloquear(valor, permiteCancelar = false) {
   trabajando = valor;
-  if (valor) panelEnProceso = panelActivo;
+  if (valor) {
+    panelEnProceso = panelActivo;
+    for (const linea of lineasTemporales.values()) linea.pausar();
+  }
   document.querySelectorAll("fieldset, [data-panel]").forEach((control) => {
     control.disabled = valor;
   });
@@ -96,6 +99,7 @@ document.querySelectorAll("[data-cancelar]").forEach((boton) =>
 );
 document.querySelectorAll("[data-panel]").forEach((boton) =>
   boton.addEventListener("click", () => {
+    for (const linea of lineasTemporales.values()) linea.pausar();
     panelActivo = boton.dataset.panel;
     document.querySelectorAll("[data-panel]").forEach((otro) => {
       const activo = otro === boton;
@@ -113,6 +117,7 @@ function actualizarOperacion(bloque) {
     elemento(`${extremo}-${bloque}`).disabled = operacion !== "cortar";
   }
   if (bloque === "video") {
+    elemento("tipo-corte-video").disabled = operacion !== "cortar";
     elemento("banda-sonora").hidden = operacion !== "sustituir";
     elemento("archivo-banda").required = operacion === "sustituir";
     elemento("archivo-banda").disabled = operacion !== "sustituir";
@@ -122,32 +127,21 @@ for (const bloque of ["sonido", "video"]) {
   elemento(`operacion-${bloque}`).addEventListener("change", () =>
     actualizarOperacion(bloque),
   );
+  const linea = crearLineaTemporal(bloque, {
+    avisar: (mensaje) => avisar(mensaje, false, bloque),
+    estaOcupado: () => trabajando,
+  });
+  lineasTemporales.set(bloque, linea);
   elemento(`archivo-${bloque}`).addEventListener("change", () => {
-    const vista = elemento(`vista-${bloque}`);
-    vista.pause();
-    vista.removeAttribute("src");
-    vista.load();
-    vista.hidden = true;
-    if (vistas.has(bloque)) URL.revokeObjectURL(vistas.get(bloque));
     const archivo = elemento(`archivo-${bloque}`).files[0];
+    linea.cargar();
     if (!archivo) return;
     try {
       validarArchivo(archivo);
+      avisar("", false, bloque);
+      linea.cargar(archivo);
     } catch (error) {
-      avisar(error.message, true);
-      return;
-    }
-    const direccion = URL.createObjectURL(archivo);
-    vistas.set(bloque, direccion);
-    vista.src = direccion;
-  });
-  elemento(`vista-${bloque}`).addEventListener("loadedmetadata", () => {
-    const duracion = elemento(`vista-${bloque}`).duration;
-    if (Number.isFinite(duracion)) {
-      elemento(`fin-${bloque}`).value = String(
-        Math.floor(duracion * 100) / 100,
-      );
-      elemento(`inicio-${bloque}`).value = "0";
+      avisar(error.message, true, bloque);
     }
   });
   elemento(`formulario-${bloque}`).addEventListener("submit", (evento) => {
@@ -163,6 +157,7 @@ for (const bloque of ["sonido", "video"]) {
             fin: numero(`fin-${bloque}`),
             formato: elemento("formato-sonido").value,
             banda: elemento("archivo-banda").files[0],
+            tipoCorte: elemento("tipo-corte-video").value,
           },
           progreso,
         ),
@@ -670,7 +665,7 @@ elemento("formulario-creador").addEventListener("submit", (evento) => {
 });
 window.addEventListener("pagehide", () => {
   for (const direccion of descargas.values()) URL.revokeObjectURL(direccion);
-  for (const direccion of vistas.values()) URL.revokeObjectURL(direccion);
+  for (const linea of lineasTemporales.values()) linea.destruir();
   for (const foto of fotos) URL.revokeObjectURL(foto.direccion);
   imagenOriginal?.close();
   cancelarProcesamiento();
@@ -727,3 +722,328 @@ elemento("calidad-creador").addEventListener("change", () => {
       : `Las fotos se adaptan al tamaño elegido sin recortarlas. ${calidad === "alta" ? "Alta calidad aplica compresión suave." : "Calidad equilibrada reduce el peso del vídeo."}`;
 });
 actualizarTransicion();
+
+elemento("tipo-corte-video").addEventListener("change", () => {
+  elemento("nota-corte-video").textContent =
+    elemento("tipo-corte-video").value === "preciso"
+      ? "El corte preciso recodifica el vídeo para respetar la selección. Tarda más y puede modificar ligeramente la calidad."
+      : "El corte rápido conserva la calidad original, pero el inicio puede adelantarse al fotograma clave anterior.";
+});
+
+// Vista previa local: comparte los tiempos con los campos numéricos del formulario.
+function crearLineaTemporal(bloque, { avisar, estaOcupado }) {
+  const buscar = (nombre) => document.getElementById(`${nombre}-${bloque}`);
+  const vista = buscar("vista");
+  const panel = buscar("reproductor");
+  const lienzo = buscar("linea");
+  const contexto = lienzo.getContext("2d");
+  const inicio = buscar("inicio");
+  const fin = buscar("fin");
+  const controles = buscar("seleccion");
+  let duracion = 0;
+  let direccion;
+  let version = 0;
+  let picos;
+  let arrastre;
+  let soloSeleccion = false;
+  let animacion;
+  const tiempo = (valor) => {
+    const centesimas = Math.round(Math.max(0, valor || 0) * 100);
+    return `${Math.floor(centesimas / 6000)}:${String(Math.floor(centesimas / 100) % 60).padStart(2, "0")}.${String(centesimas % 100).padStart(2, "0")}`;
+  };
+  const cortar = () => buscar("operacion").value === "cortar";
+  function dibujar() {
+    const ancho = Math.max(1, lienzo.clientWidth);
+    const alto = 100;
+    const escala = window.devicePixelRatio || 1;
+    if (lienzo.width !== Math.round(ancho * escala)) {
+      lienzo.width = Math.round(ancho * escala);
+      lienzo.height = Math.round(alto * escala);
+    }
+    contexto.setTransform(escala, 0, 0, escala, 0, 0);
+    contexto.clearRect(0, 0, ancho, alto);
+    contexto.fillStyle = "#151a21";
+    contexto.fillRect(0, 0, ancho, alto);
+    if (!duracion) return;
+    const izquierda = (Number(inicio.value) / duracion) * ancho;
+    const derecha = (Number(fin.value) / duracion) * ancho;
+    if (cortar()) {
+      contexto.fillStyle = "#c4e6ac22";
+      contexto.fillRect(izquierda, 0, derecha - izquierda, alto);
+    }
+    contexto.strokeStyle = "#829181";
+    contexto.lineWidth = 1;
+    contexto.beginPath();
+    if (picos) {
+      for (let i = 0; i < picos.length; i++) {
+        const x = (i / picos.length) * ancho;
+        const altura = Math.max(1, picos[i] * 35);
+        contexto.moveTo(x, 50 - altura);
+        contexto.lineTo(x, 50 + altura);
+      }
+    } else {
+      contexto.moveTo(0, 50);
+      contexto.lineTo(ancho, 50);
+      for (let i = 0; i <= 10; i++) {
+        contexto.moveTo((i * ancho) / 10, 40);
+        contexto.lineTo((i * ancho) / 10, 60);
+      }
+    }
+    contexto.stroke();
+    if (cortar()) {
+      contexto.strokeStyle = "#c4e6ac";
+      contexto.lineWidth = 3;
+      for (const x of [izquierda, derecha]) {
+        contexto.beginPath();
+        contexto.moveTo(x, 8);
+        contexto.lineTo(x, 92);
+        contexto.stroke();
+        contexto.fillStyle = "#c4e6ac";
+        contexto.fillRect(Math.max(0, Math.min(ancho - 8, x - 4)), 4, 8, 12);
+      }
+    }
+    const posicion = (vista.currentTime / duracion) * ancho;
+    contexto.strokeStyle = "#ffffff";
+    contexto.lineWidth = 2;
+    contexto.beginPath();
+    contexto.moveTo(posicion, 20);
+    contexto.lineTo(posicion, 85);
+    contexto.stroke();
+    buscar("posicion").textContent =
+      `${tiempo(vista.currentTime)} / ${tiempo(duracion)}`;
+    lienzo.setAttribute("aria-valuenow", String(vista.currentTime));
+    lienzo.setAttribute("aria-valuetext", tiempo(vista.currentTime));
+  }
+  function actualizar() {
+    for (const extremo of ["inicio", "fin"]) {
+      buscar(`marcador-${extremo}`).max = String(duracion);
+      buscar(`marcador-${extremo}`).value = buscar(extremo).value;
+    }
+    const valido = Number(fin.value) > Number(inicio.value);
+    fin.setCustomValidity(
+      cortar() && !valido ? "El fin debe ser posterior al inicio." : "",
+    );
+    buscar("fragmento").textContent = valido
+      ? `Fragmento: ${tiempo(Number(fin.value) - Number(inicio.value))}`
+      : "Ajusta el inicio y el fin.";
+    controles.hidden = !cortar() || !duracion;
+    dibujar();
+  }
+  function marcar(extremo, valor) {
+    if (estaOcupado() || !duracion) return;
+    const minimo = extremo === "fin" ? Number(inicio.value) + 0.01 : 0;
+    const maximo = extremo === "inicio" ? Number(fin.value) - 0.01 : duracion;
+    buscar(extremo).value = Math.min(maximo, Math.max(minimo, valor)).toFixed(
+      2,
+    );
+    soloSeleccion = false;
+    vista.pause();
+    vista.currentTime = Number(buscar(extremo).value);
+    actualizar();
+  }
+  async function reproducir(seleccion = false) {
+    if (estaOcupado() || !duracion) return;
+    if (!vista.paused && !seleccion) {
+      vista.pause();
+      return;
+    }
+    if (seleccion) {
+      if (!fin.reportValidity()) return;
+      vista.currentTime = Number(inicio.value);
+    }
+    soloSeleccion = seleccion;
+    try {
+      await vista.play();
+    } catch {
+      avisar(
+        "Este navegador no puede reproducir el archivo. Puedes introducir los tiempos manualmente.",
+      );
+    }
+  }
+  function seguir() {
+    if (soloSeleccion && vista.currentTime >= Number(fin.value)) {
+      vista.pause();
+      vista.currentTime = Number(fin.value);
+      soloSeleccion = false;
+    }
+    dibujar();
+    if (!vista.paused) animacion = requestAnimationFrame(seguir);
+  }
+  vista.addEventListener("play", () => {
+    buscar("reproducir").textContent = "Pausar";
+    cancelAnimationFrame(animacion);
+    seguir();
+  });
+  vista.addEventListener("pause", () => {
+    buscar("reproducir").textContent = "Reproducir";
+    cancelAnimationFrame(animacion);
+    dibujar();
+  });
+  vista.addEventListener("timeupdate", () => {
+    if (soloSeleccion && vista.currentTime >= Number(fin.value)) vista.pause();
+    dibujar();
+  });
+  vista.addEventListener("seeked", dibujar);
+  vista.addEventListener("loadedmetadata", () => {
+    if (!Number.isFinite(vista.duration) || vista.duration <= 0) return;
+    duracion = Math.floor(vista.duration * 100) / 100;
+    if (!duracion) return;
+    inicio.value = "0";
+    fin.value = String(duracion);
+    inicio.max = fin.max = String(duracion);
+    lienzo.setAttribute("aria-valuemax", String(duracion));
+    panel.hidden = false;
+    actualizar();
+  });
+  vista.addEventListener("error", () => {
+    if (!direccion) return;
+    panel.hidden = true;
+    avisar(
+      "La vista previa no es compatible con este archivo. Puedes seguir usando los tiempos numéricos para procesarlo.",
+    );
+  });
+  buscar("reproducir").addEventListener("click", () => reproducir());
+  buscar("reproducir-seleccion").addEventListener("click", () =>
+    reproducir(true),
+  );
+  for (const extremo of ["inicio", "fin"]) {
+    buscar(`marcar-${extremo}`).addEventListener("click", () =>
+      marcar(extremo, vista.currentTime),
+    );
+    buscar(`marcador-${extremo}`).addEventListener("input", (evento) =>
+      marcar(extremo, Number(evento.target.value)),
+    );
+    buscar(extremo).addEventListener("input", () => {
+      soloSeleccion = false;
+      actualizar();
+    });
+  }
+  buscar("volumen").addEventListener("input", (evento) => {
+    vista.volume = Number(evento.target.value);
+  });
+  buscar("operacion").addEventListener("change", () => {
+    vista.pause();
+    soloSeleccion = false;
+    actualizar();
+  });
+  const situar = (evento) => {
+    const limites = lienzo.getBoundingClientRect();
+    return Math.min(
+      duracion,
+      Math.max(0, ((evento.clientX - limites.left) / limites.width) * duracion),
+    );
+  };
+  lienzo.addEventListener("pointerdown", (evento) => {
+    if (estaOcupado() || !duracion || evento.button !== 0) return;
+    const valor = situar(evento);
+    const margen = (18 / lienzo.clientWidth) * duracion;
+    arrastre =
+      cortar() && Math.abs(valor - Number(inicio.value)) <= margen
+        ? "inicio"
+        : cortar() && Math.abs(valor - Number(fin.value)) <= margen
+          ? "fin"
+          : "posicion";
+    lienzo.setPointerCapture(evento.pointerId);
+    vista.pause();
+    soloSeleccion = false;
+    if (arrastre === "posicion") vista.currentTime = valor;
+    else marcar(arrastre, valor);
+    dibujar();
+  });
+  lienzo.addEventListener("pointermove", (evento) => {
+    if (!arrastre || estaOcupado()) return;
+    if (arrastre === "posicion") vista.currentTime = situar(evento);
+    else marcar(arrastre, situar(evento));
+    dibujar();
+  });
+  for (const evento of ["pointerup", "pointercancel", "lostpointercapture"])
+    lienzo.addEventListener(evento, () => {
+      arrastre = undefined;
+    });
+  lienzo.addEventListener("keydown", (evento) => {
+    if (estaOcupado() || !duracion) return;
+    if (["ArrowLeft", "ArrowRight", "Home", "End", " "].includes(evento.key))
+      evento.preventDefault();
+    if (evento.key === " ") void reproducir();
+    else if (evento.key === "Home") vista.currentTime = 0;
+    else if (evento.key === "End") vista.currentTime = duracion;
+    else if (["ArrowLeft", "ArrowRight"].includes(evento.key))
+      vista.currentTime = Math.max(
+        0,
+        Math.min(
+          duracion,
+          vista.currentTime +
+            (evento.key === "ArrowLeft" ? -1 : 1) * (evento.shiftKey ? 1 : 0.1),
+        ),
+      );
+    soloSeleccion = false;
+  });
+  const observador = new ResizeObserver(dibujar);
+  observador.observe(lienzo);
+  async function cargarOnda(archivo, actual) {
+    if (bloque !== "sonido") return;
+    // Limita la decodificación para no agotar la memoria con grabaciones extensas.
+    if (archivo.size > 32 * 1024 * 1024) return;
+    let decodificador;
+    try {
+      decodificador = new OfflineAudioContext(1, 1, 8000);
+      const datos = await decodificador.decodeAudioData(
+        await archivo.arrayBuffer(),
+      );
+      if (actual !== version) return;
+      const resultado = new Float32Array(1000);
+      const muestras = datos.getChannelData(0);
+      const paso = Math.max(1, Math.floor(muestras.length / resultado.length));
+      for (let i = 0; i < resultado.length; i++) {
+        const limite = Math.min(muestras.length, (i + 1) * paso);
+        for (let j = i * paso; j < limite; j++)
+          resultado[i] = Math.max(resultado[i], Math.abs(muestras[j]));
+      }
+      picos = resultado;
+      dibujar();
+    } catch {
+      /* La reproducción y la selección siguen disponibles sin onda. */
+    }
+  }
+  function cargar(archivo) {
+    version++;
+    vista.pause();
+    soloSeleccion = false;
+    duracion = 0;
+    picos = undefined;
+    panel.hidden = true;
+    vista.removeAttribute("src");
+    vista.load();
+    if (direccion) URL.revokeObjectURL(direccion);
+    direccion = undefined;
+    inicio.removeAttribute("max");
+    fin.removeAttribute("max");
+    fin.setCustomValidity("");
+    if (!archivo) return;
+    direccion = URL.createObjectURL(archivo);
+    vista.src = direccion;
+    const actual = version;
+    vista.addEventListener(
+      "loadedmetadata",
+      () => {
+        if (actual === version && vista.duration <= 600)
+          void cargarOnda(archivo, actual);
+      },
+      { once: true },
+    );
+  }
+  return {
+    cargar,
+    pausar: () => {
+      vista.pause();
+      soloSeleccion = false;
+    },
+    destruir: () => {
+      version++;
+      vista.pause();
+      cancelAnimationFrame(animacion);
+      observador.disconnect();
+      if (direccion) URL.revokeObjectURL(direccion);
+    },
+  };
+}
