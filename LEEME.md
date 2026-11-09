@@ -43,16 +43,20 @@ Mutatio/
 - **Sonido:** cortar y convertir a MP3 o WAV.
 - **Vídeo:** cortar sin recodificar, silenciar o sustituir la pista de sonido. Salida Matroska (`.mkv`) para conservar los códecs originales. Los cortes dependen de los fotogramas clave y pueden variar ligeramente respecto al intervalo elegido.
 - **Imágenes:** recortar, pixelar y comprimir a WebP o JPEG. Primero aplica la selección y después descarga. JPEG utiliza fondo blanco para las transparencias.
-- **Crear vídeo:** hasta 150 fotos, orden editable, duración por foto, cuatro efectos de transición y música opcional. Salida MP4 de 1280 × 720 a 30 fotogramas por segundo. Las transiciones no alargan el vídeo; la música se repite si es necesario y se desvanece al final.
+- **Crear vídeo:** hasta 200 fotos, orden editable, duración por foto y por transición, cuatro efectos y música opcional. Salida MP4 o MKV a 30 fotogramas por segundo, con tamaños de 720p, 1080p, 2160p o el de la primera foto. Calidad equilibrada, alta o sin pérdidas de codificación. Las transiciones no alargan el vídeo; la música se repite si es necesario y se desvanece al final.
 
 Cada herramienta conserva su propio resultado hasta reemplazarlo o recargar la página. El enlace permite repetir una descarga si el navegador no la inicia automáticamente.
 
 ## Límites
 
 - 512 MB por archivo y 40 millones de píxeles por imagen.
-- Hasta 150 fotografías por vídeo, con exposiciones entre 0,1 y 60 segundos, ajustadas a fotogramas completos.
-- 256 MB de vídeo temporal comprimido. Si se supera, reduce los segundos por foto.
+- Hasta 200 fotografías por vídeo, con exposiciones entre 0,1 y 60 segundos, ajustadas a fotogramas completos.
+- Salida de hasta 8,3 millones de píxeles y 3840 píxeles por lado. Conservar el tamaño de la primera foto añade como máximo un píxel de borde para obtener dimensiones pares.
+- Transiciones de 0,1 segundos hasta la duración de una foto, ajustadas a fotogramas completos.
+- 256 MB de vídeo temporal comprimido. Si se supera, reduce la resolución, la calidad o los segundos por foto.
 
-Las fotos se reducen al incorporarlas y se procesan en bloques de diez; con transiciones se añade una foto de enlace. Se liberan los archivos temporales y el trabajador entre bloques. El tiempo de procesamiento depende del ordenador, del contenido y de la duración elegida.
+Se conservan los archivos originales y solo se crean miniaturas al incorporarlos. Las fotos se preparan una a una al crear el vídeo, en PNG sin compresión con pérdidas, adaptándolas al tamaño elegido sin recortar. Se procesan en bloques de hasta diez imágenes, menores a resoluciones altas; con transiciones se añade una foto de enlace. Se liberan los archivos temporales y el trabajador entre bloques. El tiempo de procesamiento depende del ordenador, del contenido y de la duración elegida.
+
+El modo sin pérdidas conserva los píxeles del fotograma preparado mediante H.264 RGB; no deshace el redimensionado ni recupera detalle ausente en el original. Genera archivos mayores y su reproducción depende del reproductor. La opción de calidad afecta a la imagen; la música se codifica en AAC y se desvanece al final.
 
 Los archivos seleccionados nunca se envían a la VPS. La web no utiliza analítica, fuentes remotas ni servicios externos durante su funcionamiento. Necesita HTTPS, o localhost para desarrollo; no se puede abrir mediante `file://`.

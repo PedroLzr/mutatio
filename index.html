@@ -370,7 +370,7 @@
               <h2 id="titulo-creador">Creador de vídeos</h2>
             </div>
             <label id="zona-fotos" class="archivo zona-fotos"
-              >Arrastra hasta 150 fotos aquí o selecciónalas<input
+              >Arrastra hasta 200 fotos aquí o selecciónalas<input
                 id="archivos-fotos"
                 type="file"
                 accept="image/jpeg,image/png,image/webp,image/avif,image/bmp"
@@ -428,9 +428,52 @@
                 </option>
               </select></label
             >
+            <label id="campo-duracion-transicion" hidden
+              >Duración de la transición (segundos)
+              <input
+                id="duracion-transicion"
+                type="number"
+                min="0.1"
+                max="3"
+                step="0.1"
+                value="0.5"
+                required
+              />
+            </label>
             <p id="nota-transicion" class="nota" hidden>
-              La transición ocupa hasta 0,5 segundos al final de cada foto, sin
-              alargar el vídeo.
+              La transición ocupa el final de cada foto, sin alargar el vídeo.
+              No puede durar más que una foto.
+            </p>
+            <div class="campos">
+              <label
+                >Tamaño del vídeo<select id="resolucion-creador">
+                  <option value="720">1280 × 720</option>
+                  <option value="1080" selected>1920 × 1080</option>
+                  <option value="2160">3840 × 2160</option>
+                  <option value="original">
+                    Conservar tamaño de la primera foto
+                  </option>
+                </select></label
+              >
+              <label
+                >Calidad<select id="calidad-creador">
+                  <option value="equilibrada">Equilibrada</option>
+                  <option value="alta" selected>Alta calidad</option>
+                  <option value="sin-perdidas">
+                    Sin pérdidas de codificación
+                  </option>
+                </select></label
+              >
+              <label
+                >Formato de salida<select id="formato-creador">
+                  <option value="mp4">MP4</option>
+                  <option value="mkv">MKV</option>
+                </select></label
+              >
+            </div>
+            <p id="nota-calidad" class="nota">
+              Las fotos se adaptan al tamaño elegido sin recortarlas. Alta
+              calidad aplica compresión suave.
             </p>
             <div class="acciones">
               <button id="quitar-musica" type="button" hidden>
@@ -438,7 +481,8 @@
               </button>
             </div>
             <p class="nota">
-              Salida panorámica de 1280 × 720. La música se desvanece al final.
+              Salida a 30 fotogramas por segundo. La música se repite si hace
+              falta y se desvanece al final.
             </p>
             <button class="principal" type="submit">
               Crear y descargar <span aria-hidden="true">↓</span>

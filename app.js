@@ -510,38 +510,30 @@ function actualizarResumenFotos() {
 async function prepararFoto(archivo, senal) {
   senal.throwIfAborted();
   const imagen = await abrirImagen(archivo);
-  const superficie = document.createElement("canvas");
   const miniatura = document.createElement("canvas");
   try {
     senal.throwIfAborted();
-    superficie.width = 1280;
-    superficie.height = 720;
-    const pincel = superficie.getContext("2d");
-    pincel.fillStyle = "#000000";
-    pincel.fillRect(0, 0, 1280, 720);
-    const escala = Math.min(1280 / imagen.width, 720 / imagen.height);
-    const ancho = imagen.width * escala,
-      alto = imagen.height * escala;
-    pincel.drawImage(imagen, (1280 - ancho) / 2, (720 - alto) / 2, ancho, alto);
-    const contenido = await convertirLienzo(superficie, "image/jpeg", 0.9);
-    senal.throwIfAborted();
     miniatura.width = 240;
     miniatura.height = 135;
-    miniatura.getContext("2d").drawImage(superficie, 0, 0, 240, 135);
+    const pincel = miniatura.getContext("2d");
+    pincel.fillStyle = "#000000";
+    pincel.fillRect(0, 0, 240, 135);
+    const escala = Math.min(240 / imagen.width, 135 / imagen.height);
+    const ancho = imagen.width * escala,
+      alto = imagen.height * escala;
+    pincel.drawImage(imagen, (240 - ancho) / 2, (135 - alto) / 2, ancho, alto);
     const vista = await convertirLienzo(miniatura, "image/jpeg", 0.75);
     senal.throwIfAborted();
     return {
       nombre: archivo.name,
-      contenido,
+      contenido: archivo,
+      ancho: imagen.width,
+      alto: imagen.height,
       direccion: URL.createObjectURL(vista),
     };
   } finally {
     imagen.close();
-    superficie.width =
-      superficie.height =
-      miniatura.width =
-      miniatura.height =
-        0;
+    miniatura.width = miniatura.height = 0;
   }
 }
 
@@ -550,7 +542,7 @@ async function agregarFotos(archivos) {
   bloquear(true, true);
   preparacionFotos = new AbortController();
   const nuevas = [];
-  // Libera las referencias del selector; solo se decodifica un original cada vez.
+  // Conserva los archivos originales sin decodificarlos todos a la vez.
   elemento("archivos-fotos").value = "";
   try {
     if (fotos.length + archivos.length > MAXIMO_FOTOS)
@@ -611,22 +603,70 @@ zonaFotos.addEventListener("drop", (evento) =>
 );
 elemento("duracion-foto").addEventListener("input", actualizarResumenFotos);
 actualizarResumenFotos();
+function tamanoSalida() {
+  const resolucion = elemento("resolucion-creador").value;
+  if (resolucion === "original") {
+    if (!fotos.length) throw new Error("Añade al menos una fotografía.");
+    // Añade como máximo un píxel de borde para los formatos que exigen dimensiones pares.
+    const ancho = Math.ceil(fotos[0].ancho / 2) * 2;
+    const alto = Math.ceil(fotos[0].alto / 2) * 2;
+    if (ancho > 3840 || alto > 3840 || ancho * alto > 3840 * 2160)
+      throw new Error(
+        "La primera foto supera el tamaño admitido. Elige una resolución de hasta 3840 × 2160.",
+      );
+    return { ancho, alto };
+  }
+  const alto = Number(resolucion);
+  return { ancho: Math.round((alto * 16) / 9), alto };
+}
+async function prepararFotograma(archivo, ancho, alto) {
+  const imagen = await abrirImagen(archivo);
+  const superficie = document.createElement("canvas");
+  try {
+    superficie.width = ancho;
+    superficie.height = alto;
+    const pincel = superficie.getContext("2d");
+    pincel.fillStyle = "#000000";
+    pincel.fillRect(0, 0, ancho, alto);
+    pincel.imageSmoothingQuality = "high";
+    const escala = Math.min(ancho / imagen.width, alto / imagen.height);
+    const ajustadoAncho = imagen.width * escala,
+      ajustadoAlto = imagen.height * escala;
+    pincel.drawImage(
+      imagen,
+      (ancho - ajustadoAncho) / 2,
+      (alto - ajustadoAlto) / 2,
+      ajustadoAncho,
+      ajustadoAlto,
+    );
+    // PNG evita una compresión con pérdidas antes de codificar el vídeo.
+    return await convertirLienzo(superficie, "image/png");
+  } finally {
+    imagen.close();
+    superficie.width = superficie.height = 0;
+  }
+}
 elemento("formulario-creador").addEventListener("submit", (evento) => {
   evento.preventDefault();
-  realizar(
-    () =>
-      procesarMultimedia(
-        {
-          bloque: "creador",
-          fotos: fotos.map((foto) => foto.contenido),
-          segundos: numero("duracion-foto"),
-          musica: elemento("musica").files[0],
-          transicion: elemento("transicion").value,
-        },
-        progreso,
-      ),
-    true,
-  );
+  realizar(async () => {
+    const { ancho, alto } = tamanoSalida();
+    return procesarMultimedia(
+      {
+        bloque: "creador",
+        fotos: fotos.map((foto) => foto.contenido),
+        segundos: numero("duracion-foto"),
+        musica: elemento("musica").files[0],
+        transicion: elemento("transicion").value,
+        duracionTransicion: numero("duracion-transicion"),
+        calidad: elemento("calidad-creador").value,
+        formato: elemento("formato-creador").value,
+        ancho,
+        alto,
+        prepararFoto: (archivo) => prepararFotograma(archivo, ancho, alto),
+      },
+      progreso,
+    );
+  }, true);
 });
 window.addEventListener("pagehide", () => {
   for (const direccion of descargas.values()) URL.revokeObjectURL(direccion);
@@ -667,7 +707,23 @@ elemento("quitar-musica").addEventListener("click", () => {
   elemento("quitar-musica").hidden = true;
 });
 
-elemento("transicion").addEventListener("change", () => {
-  elemento("nota-transicion").hidden =
-    elemento("transicion").value === "ninguna";
+function actualizarTransicion() {
+  const activa = elemento("transicion").value !== "ninguna";
+  elemento("nota-transicion").hidden = !activa;
+  elemento("campo-duracion-transicion").hidden = !activa;
+  elemento("duracion-transicion").required = activa;
+  elemento("duracion-transicion").disabled = !activa;
+  elemento("duracion-transicion").max = elemento("duracion-foto").value;
+  if (numero("duracion-transicion") > numero("duracion-foto"))
+    elemento("duracion-transicion").value = elemento("duracion-foto").value;
+}
+elemento("transicion").addEventListener("change", actualizarTransicion);
+elemento("duracion-foto").addEventListener("input", actualizarTransicion);
+elemento("calidad-creador").addEventListener("change", () => {
+  const calidad = elemento("calidad-creador").value;
+  elemento("nota-calidad").textContent =
+    calidad === "sin-perdidas"
+      ? "Conserva los píxeles del fotograma preparado, sin pérdidas de codificación. Genera archivos mayores y puede no reproducirse en todos los navegadores. Las fotos se adaptan al tamaño elegido."
+      : `Las fotos se adaptan al tamaño elegido sin recortarlas. ${calidad === "alta" ? "Alta calidad aplica compresión suave." : "Calidad equilibrada reduce el peso del vídeo."}`;
 });
+actualizarTransicion();

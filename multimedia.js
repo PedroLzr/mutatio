@@ -4,7 +4,7 @@ let ocupado = false;
 let cancelado = false;
 let duracionActual = 0;
 let comunicar = () => {};
-export const MAXIMO_FOTOS = 150;
+export const MAXIMO_FOTOS = 200;
 const FOTOS_POR_BLOQUE = 10;
 const LIMITE_SECUENCIA = 256 * 1024 * 1024;
 let inicioProgreso = 0;
@@ -29,34 +29,43 @@ async function inicializar() {
     );
   }
   comunicar(null, "Cargando el motor multimedia…");
-  const { FFmpeg: MotorMultimedia } = await import(
-    "./dependencias/motor-0.12.15/index.js"
-  );
-  if (cancelado) throw new Error("Operación cancelada.");
-  const instancia = new MotorMultimedia();
-  motor = instancia;
-  instancia.on("progress", ({ time: tiempo }) => {
-    if (duracionActual > 0) {
-      const fraccion = Math.min(
-        1,
-        Math.max(0, tiempo / (duracionActual * 1000000)),
-      );
-      comunicar(
-        Math.min(99, inicioProgreso + fraccion * amplitudProgreso),
-        mensajeProgreso,
-      );
-    }
-  });
-  await instancia.load({
-    coreURL: new URL(
-      "./dependencias/nucleo-0.12.10/ffmpeg-core.js",
-      import.meta.url,
-    ).href,
-    wasmURL: new URL(
-      "./dependencias/nucleo-0.12.10/ffmpeg-core.wasm",
-      import.meta.url,
-    ).href,
-  });
+  let instancia;
+  try {
+    const { FFmpeg: MotorMultimedia } =
+      await import("./dependencias/motor-0.12.15/index.js");
+    if (cancelado) throw new Error("Operación cancelada.");
+    instancia = new MotorMultimedia();
+    motor = instancia;
+    instancia.on("progress", ({ time: tiempo }) => {
+      if (duracionActual > 0) {
+        const fraccion = Math.min(
+          1,
+          Math.max(0, tiempo / (duracionActual * 1000000)),
+        );
+        comunicar(
+          Math.min(99, inicioProgreso + fraccion * amplitudProgreso),
+          mensajeProgreso,
+        );
+      }
+    });
+    await instancia.load({
+      coreURL: new URL(
+        "./dependencias/nucleo-0.12.10/ffmpeg-core.js",
+        import.meta.url,
+      ).href,
+      wasmURL: new URL(
+        "./dependencias/nucleo-0.12.10/ffmpeg-core.wasm",
+        import.meta.url,
+      ).href,
+    });
+  } catch (error) {
+    instancia?.terminate();
+    if (cancelado) throw new Error("Operación cancelada.");
+    throw new Error(
+      "No se pudo cargar el motor multimedia. Recarga la página y comprueba que la carpeta dependencias esté completa.",
+      { cause: error },
+    );
+  }
   return instancia;
 }
 
@@ -238,10 +247,6 @@ export async function procesarMultimedia(opciones, notificar) {
     return { contenido: new Blob([contenido], { type: tipo }), nombre };
   } catch (error) {
     if (cancelado) throw new Error("Operación cancelada.");
-    if (/fetch|load|import|network/i.test(error.message))
-      throw new Error(
-        "No se pudo cargar el motor multimedia. Comprueba que las dependencias estén instaladas y vuelve a intentarlo.",
-      );
     throw error;
   } finally {
     if (instancia?.loaded) {
@@ -265,10 +270,21 @@ export async function procesarMultimedia(opciones, notificar) {
   }
 }
 
-// Diez fotografías por bloque y una de enlace cuando hay transición. Cada trabajador se destruye
+// Hasta diez fotografías por bloque y una de enlace con transición. Cada trabajador se destruye
 // al terminar su bloque; fuera de WebAssembly se conservan vídeos comprimidos.
 async function crearSecuencia(
-  { fotos, segundos, musica, transicion = "ninguna" },
+  {
+    fotos,
+    segundos,
+    musica,
+    transicion = "ninguna",
+    duracionTransicion = 0.5,
+    calidad = "alta",
+    formato = "mp4",
+    prepararFoto = async (foto) => foto,
+    ancho = 1280,
+    alto = 720,
+  },
   primeraInstancia,
 ) {
   if (
@@ -296,8 +312,37 @@ async function crearSecuencia(
   const efecto = efectos[transicion];
   const fotogramasPorFoto = Math.max(1, Math.round(segundos * 30));
   const segundosReales = fotogramasPorFoto / 30;
+  if (!["equilibrada", "alta", "sin-perdidas"].includes(calidad))
+    throw new Error("Selecciona una calidad válida.");
+  if (!["mp4", "mkv"].includes(formato))
+    throw new Error("Selecciona MP4 o MKV.");
+  if (
+    ![ancho, alto].every(
+      (valor) => Number.isInteger(valor) && valor > 0 && valor <= 3840,
+    ) ||
+    ancho * alto > 3840 * 2160
+  )
+    throw new Error(
+      "El tamaño de salida no puede superar 8,3 millones de píxeles ni 3840 píxeles por lado.",
+    );
+  if (
+    efecto &&
+    (!Number.isFinite(duracionTransicion) ||
+      duracionTransicion < 0.1 ||
+      duracionTransicion > segundosReales)
+  )
+    throw new Error(
+      "La transición debe durar entre 0,1 segundos y la duración de una foto.",
+    );
   const segundosTransicion =
-    Math.min(15, Math.max(2, Math.floor(fotogramasPorFoto / 2))) / 30;
+    Math.min(fotogramasPorFoto, Math.round(duracionTransicion * 30)) / 30;
+  const sinPerdidas = calidad === "sin-perdidas";
+  const formatoPixeles = sinPerdidas ? "rgb24" : "yuv420p";
+  // A mayor resolución, menos imágenes residentes en el sistema de archivos del trabajador.
+  const fotosPorBloque = Math.min(
+    FOTOS_POR_BLOQUE,
+    Math.max(1, Math.floor((10 * 1280 * 720) / (ancho * alto))),
+  );
   const duracionTotal = fotos.length * segundosReales;
   const bloques = [];
   let bytesAcumulados = 0;
@@ -332,20 +377,37 @@ async function crearSecuencia(
     if (musica) {
       const ruta = `musica.${extension(musica)}`;
       await guardar(musica, ruta);
-      const datos = await inspeccionar(instancia, ruta, temporales);
-      if (!datos.pistas.includes("audio"))
+      comunicar(null, "Comprobando la pista de sonido…");
+      try {
+        // Decodifica una muestra real. No depende de los metadatos de duración ni de ffprobe.
+        await ejecutar(instancia, [
+          "-i",
+          ruta,
+          "-map",
+          "0:a:0",
+          "-t",
+          "0.1",
+          "-vn",
+          "-f",
+          "null",
+          "-",
+        ]);
+      } catch (error) {
+        if (cancelado) throw error;
         throw new Error(
-          "El archivo de música no contiene una pista de sonido.",
+          "No se pudo leer la música. Elige un archivo de sonido válido, por ejemplo MP3, WAV, M4A u OGG.",
+          { cause: error },
         );
+      }
       for (const temporal of temporales) await instancia.deleteFile(temporal);
       temporales.clear();
     }
-    for (let inicio = 0; inicio < fotos.length; inicio += FOTOS_POR_BLOQUE) {
+    for (let inicio = 0; inicio < fotos.length; inicio += fotosPorBloque) {
       if (cancelado) throw new Error("Operación cancelada.");
       if (!instancia) instancia = await inicializar();
-      const cantidad = Math.min(FOTOS_POR_BLOQUE, fotos.length - inicio);
+      const cantidad = Math.min(fotosPorBloque, fotos.length - inicio);
       const numeroBloque = bloques.length + 1;
-      const totalBloques = Math.ceil(fotos.length / FOTOS_POR_BLOQUE);
+      const totalBloques = Math.ceil(fotos.length / fotosPorBloque);
       inicioProgreso = (inicio / fotos.length) * 90;
       amplitudProgreso = (cantidad / fotos.length) * 90;
       mensajeProgreso = `Creando bloque ${numeroBloque} de ${totalBloques}…`;
@@ -353,23 +415,23 @@ async function crearSecuencia(
       duracionActual = cantidad * segundosReales;
       for (let indice = 0; indice < cantidad; indice++) {
         await guardar(
-          fotos[inicio + indice],
-          `foto-${String(indice).padStart(3, "0")}.jpg`,
+          await prepararFoto(fotos[inicio + indice]),
+          `foto-${String(indice).padStart(3, "0")}.png`,
         );
       }
       const salida = "bloque.mp4";
       temporales.add(salida);
       const codificacion = [
         "-c:v",
-        "libx264",
+        sinPerdidas ? "libx264rgb" : "libx264",
         "-threads",
         "1",
         "-preset",
         "ultrafast",
         "-crf",
-        "23",
+        sinPerdidas ? "0" : calidad === "alta" ? "18" : "23",
         "-pix_fmt",
-        "yuv420p",
+        formatoPixeles,
         "-video_track_timescale",
         "15360",
       ];
@@ -378,7 +440,7 @@ async function crearSecuencia(
           "-framerate",
           `30/${fotogramasPorFoto}`,
           "-i",
-          "foto-%03d.jpg",
+          "foto-%03d.png",
           "-map",
           "0:v:0",
           "-an",
@@ -393,14 +455,17 @@ async function crearSecuencia(
         // Cada transición solo abre dos imágenes. La foto siguiente al bloque
         // permite conservar el efecto también entre las fotos 10 y 11, 20 y 21…
         if (inicio + cantidad < fotos.length)
-          await guardar(fotos[inicio + cantidad], "siguiente.jpg");
+          await guardar(
+            await prepararFoto(fotos[inicio + cantidad]),
+            "siguiente.png",
+          );
         const fragmentos = [];
         for (let indice = 0; indice < cantidad; indice++) {
-          const actual = `foto-${String(indice).padStart(3, "0")}.jpg`;
+          const actual = `foto-${String(indice).padStart(3, "0")}.png`;
           const siguiente =
             indice + 1 < cantidad
-              ? `foto-${String(indice + 1).padStart(3, "0")}.jpg`
-              : "siguiente.jpg";
+              ? `foto-${String(indice + 1).padStart(3, "0")}.png`
+              : "siguiente.png";
           const haySiguiente = inicio + indice + 1 < fotos.length;
           const fragmento = `fragmento-${indice}.mp4`;
           temporales.add(fragmento);
@@ -432,7 +497,7 @@ async function crearSecuencia(
               "-filter_complex_threads",
               "1",
               "-filter_complex",
-              `[0:v]settb=AVTB,setpts=PTS-STARTPTS[a];[1:v]settb=AVTB,setpts=PTS-STARTPTS[b];[a][b]xfade=transition=${efecto}:duration=${segundosTransicion}:offset=${segundosReales - segundosTransicion},format=yuv420p[v]`,
+              `[0:v]settb=AVTB,setpts=PTS-STARTPTS[a];[1:v]settb=AVTB,setpts=PTS-STARTPTS[b];[a][b]xfade=transition=${efecto}:duration=${segundosTransicion}:offset=${segundosReales - segundosTransicion},format=${formatoPixeles}[v]`,
               "-map",
               "[v]",
             );
@@ -471,7 +536,7 @@ async function crearSecuencia(
       bytesAcumulados += datos.length;
       if (bytesAcumulados > LIMITE_SECUENCIA)
         throw new Error(
-          "La secuencia supera 256 MB de vídeo temporal. Reduce los segundos por foto para continuar.",
+          "La secuencia supera 256 MB de vídeo temporal. Reduce la resolución, la calidad o los segundos por foto para continuar.",
         );
       bloques.push(new Blob([datos], { type: "video/mp4" }));
       await limpiar();
@@ -512,21 +577,20 @@ async function crearSecuencia(
         "192k",
       );
     }
-    argumentos.push(
-      "-t",
-      String(duracionTotal),
-      "-movflags",
-      "+faststart",
-      "resultado.mp4",
-    );
-    temporales.add("resultado.mp4");
+    const salida = `resultado.${formato}`;
+    argumentos.push("-t", String(duracionTotal));
+    if (formato === "mp4") argumentos.push("-movflags", "+faststart");
+    argumentos.push(salida);
+    temporales.add(salida);
     await ejecutar(instancia, argumentos);
     comunicar(null, "Preparando la descarga…");
-    const datos = await instancia.readFile("resultado.mp4");
+    const datos = await instancia.readFile(salida);
     if (!datos.length) throw new Error("El vídeo final está vacío.");
     return {
-      contenido: new Blob([datos], { type: "video/mp4" }),
-      nombre: "secuencia-de-fotos.mp4",
+      contenido: new Blob([datos], {
+        type: formato === "mp4" ? "video/mp4" : "video/x-matroska",
+      }),
+      nombre: `secuencia-de-fotos.${formato}`,
     };
   } finally {
     await limpiar();
